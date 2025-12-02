@@ -14,9 +14,14 @@ ARCHIVE_FILE="${BACKUP_DIR}.tar.gz"
 # Create backup directory
 mkdir -p ${BACKUP_DIR}
 
-# Perform MongoDB dump
-echo "Dumping MongoDB database..."
-mongodump --uri="${MONGO_URI}" --out=${BACKUP_DIR}
+echo "Starting MongoDB backup..."
+
+TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+ARCHIVE_FILE="/tmp/mongodb-backup-${TIMESTAMP}.gz"
+
+# Run mongodump directly to a compressed archive file
+echo "Running mongodump..."
+mongodump --uri="${MONGO_URI}" --archive="${ARCHIVE_FILE}" --gzip
 
 if [ $? -eq 0 ]; then
     echo "MongoDB dump completed successfully"
@@ -25,25 +30,14 @@ else
     exit 1
 fi
 
-# Compress the backup
-echo "Compressing backup..."
-tar -czf ${ARCHIVE_FILE} -C /tmp ${BACKUP_NAME}
-
-if [ $? -eq 0 ]; then
-    echo "Backup compressed successfully"
-else
-    echo "Backup compression failed"
-    exit 1
-fi
-
 # Upload to S3
 echo "Uploading to S3..."
-S3_DESTINATION="s3://${S3_BUCKET}/${S3_PATH}/${BACKUP_NAME}.tar.gz"
+S3_DESTINATION="s3://${S3_BUCKET}/${S3_PATH}/mongodb-backup-${TIMESTAMP}.gz"
 
 if [ -n "$AWS_ENDPOINT_URL" ]; then
-    aws s3 cp ${ARCHIVE_FILE} ${S3_DESTINATION} --endpoint-url ${AWS_ENDPOINT_URL}
+    aws s3 cp "${ARCHIVE_FILE}" "${S3_DESTINATION}" --endpoint-url "${AWS_ENDPOINT_URL}"
 else
-    aws s3 cp ${ARCHIVE_FILE} ${S3_DESTINATION}
+    aws s3 cp "${ARCHIVE_FILE}" "${S3_DESTINATION}"
 fi
 
 if [ $? -eq 0 ]; then
@@ -55,8 +49,7 @@ fi
 
 # Cleanup
 echo "Cleaning up temporary files..."
-rm -rf ${BACKUP_DIR}
-rm -f ${ARCHIVE_FILE}
+rm -f "${ARCHIVE_FILE}"
 
 echo "========================================="
 echo "Backup completed successfully: $(date)"
