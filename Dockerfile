@@ -1,15 +1,21 @@
-# syntax=docker/dockerfile:1
-FROM mongo:7.0
+FROM python:3.9-slim
 
-RUN apt-get update && apt-get install -y awscli cron gzip && rm -rf /var/lib/apt/lists/*
+# Install required packages
+RUN apt-get update && apt-get install -y \
+    cron \
+    mongodb-database-tools \
+    && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Install AWS CLI
+RUN pip install --no-cache-dir awscli
 
-COPY backup.sh /app/backup.sh
-COPY crontab.txt /etc/cron.d/mongo-backup
+# Copy backup script
+COPY backup.sh /usr/local/bin/backup.sh
+RUN chmod +x /usr/local/bin/backup.sh
 
-RUN chmod +x /app/backup.sh \
-    && chmod 0644 /etc/cron.d/mongo-backup \
-    && crontab /etc/cron.d/mongo-backup
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-CMD ["cron", "-f"]
+# Set entrypoint
+ENTRYPOINT ["/entrypoint.sh"]

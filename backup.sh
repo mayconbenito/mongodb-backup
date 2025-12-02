@@ -1,40 +1,63 @@
 #!/bin/bash
 set -e
 
-DATE=$(date +"%Y-%m-%d_%H-%M-%S")
-ARCHIVE="/tmp/mongo-backup-$DATE.tar.gz"
+echo "========================================="
+echo "Starting MongoDB backup: $(date)"
+echo "========================================="
 
-echo "[INFO] Starting MongoDB backup at $DATE"
+# Create timestamp for backup file
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_NAME="mongodb_backup_${TIMESTAMP}"
+BACKUP_DIR="/tmp/${BACKUP_NAME}"
+ARCHIVE_FILE="${BACKUP_DIR}.tar.gz"
 
-# Dump MongoDB database
-mongodump --uri="$MONGO_URI" --archive="$ARCHIVE" --gzip
-echo "[INFO] Dump completed, uploading..."
+# Create backup directory
+mkdir -p ${BACKUP_DIR}
 
-# Upload to S3 or S3-compatible storage
-if [ -n "$AWS_ENDPOINT_URL" ]; then
-  aws --endpoint-url "$AWS_ENDPOINT_URL" s3 cp "$ARCHIVE" "s3://$S3_BUCKET/$S3_PATH/mongo-backup-$DATE.tar.gz"
+# Perform MongoDB dump
+echo "Dumping MongoDB database..."
+mongodump --uri="${MONGO_URI}" --out=${BACKUP_DIR}
+
+if [ $? -eq 0 ]; then
+    echo "MongoDB dump completed successfully"
 else
-  aws s3 cp "$ARCHIVE" "s3://$S3_BUCKET/$S3_PATH/mongo-backup-$DATE.tar.gz"
+    echo "MongoDB dump failed"
+    exit 1
 fi
 
-echo "[INFO] Backup uploaded successfully."
+# Compress the backup
+echo "Compressing backup..."
+tar -czf ${ARCHIVE_FILE} -C /tmp ${BACKUP_NAME}
 
-# Cleanup local temp files
-rm -f "$ARCHIVE"
-
-# Retention: keep last 7 backups only
-if [ -n "$AWS_ENDPOINT_URL" ]; then
-  aws --endpoint-url "$AWS_ENDPOINT_URL" s3 ls "s3://$S3_BUCKET/$S3_PATH/" | \
-    awk '{print $4}' | grep 'mongo-backup-' | sort | head -n -7 | while read file; do
-      echo "[INFO] Deleting old backup: $file"
-      aws --endpoint-url "$AWS_ENDPOINT_URL" s3 rm "s3://$S3_BUCKET/$S3_PATH/$file"
-    done
+if [ $? -eq 0 ]; then
+    echo "Backup compressed successfully"
 else
-  aws s3 ls "s3://$S3_BUCKET/$S3_PATH/" | \
-    awk '{print $4}' | grep 'mongo-backup-' | sort | head -n -7 | while read file; do
-      echo "[INFO] Deleting old backup: $file"
-      aws s3 rm "s3://$S3_BUCKET/$S3_PATH/$file"
-    done
+    echo "Backup compression failed"
+    exit 1
 fi
 
-echo "[INFO] Backup job completed successfully."
+# Upload to S3
+echo "Uploading to S3..."
+S3_DESTINATION="s3://${S3_BUCKET}/${S3_PATH}/${BACKUP_NAME}.tar.gz"
+
+if [ -n "$AWS_ENDPOINT_URL" ]; then
+    aws s3 cp ${ARCHIVE_FILE} ${S3_DESTINATION} --endpoint-url ${AWS_ENDPOINT_URL}
+else
+    aws s3 cp ${ARCHIVE_FILE} ${S3_DESTINATION}
+fi
+
+if [ $? -eq 0 ]; then
+    echo "Backup uploaded successfully to ${S3_DESTINATION}"
+else
+    echo "Backup upload failed"
+    exit 1
+fi
+
+# Cleanup
+echo "Cleaning up temporary files..."
+rm -rf ${BACKUP_DIR}
+rm -f ${ARCHIVE_FILE}
+
+echo "========================================="
+echo "Backup completed successfully: $(date)"
+echo "========================================="
