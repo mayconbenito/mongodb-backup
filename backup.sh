@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# Clear old backup files
+echo "Removing old backup files..."
+rm -f /tmp/mongodb-backup-*.gz
+rm -rf /tmp/mongodb_backup_*
+
 echo "========================================="
 echo "Starting MongoDB backup: $(date)"
 echo "========================================="
@@ -50,6 +55,9 @@ fi
 # Cleanup
 echo "Cleaning up temporary files..."
 rm -f "${ARCHIVE_FILE}"
+rm -rf "${BACKUP_DIR}"
+rm -f /tmp/mongodb-backup-*.gz
+rm -rf /tmp/mongodb_backup_*
 
 echo "========================================="
 echo "Backup completed successfully: $(date)"
