@@ -26,7 +26,7 @@ ARCHIVE_FILE="/tmp/mongodb-backup-${TIMESTAMP}.gz"
 
 # Run mongodump directly to a compressed archive file
 echo "Running mongodump..."
-mongodump --uri="${MONGO_URI}" --archive="${ARCHIVE_FILE}" --gzip
+mongodump --uri="${MONGO_URI}" --archive="${ARCHIVE_FILE}" --numParallelCollections=8 --gzip
 
 if [ $? -eq 0 ]; then
     echo "MongoDB dump completed successfully"
